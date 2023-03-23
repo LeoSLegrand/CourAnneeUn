@@ -1,0 +1,65 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Github checkout') {
+      steps {
+        script {
+          git credentialsId: 'github',
+              url: 'git@github.com:jperrouault-school-job/iia-devops.git',
+              branch: 'master'
+        }
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      tools {
+        maven 'Maven 3.9.1'
+      }
+
+      steps {
+        dir('TP/formation-devops') {
+          withSonarQubeEnv('SonarQube') {
+            sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=javadevops'
+          }
+
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+    
+    stage('Maven Install') {
+      tools {
+        maven 'Maven 3.9.1'
+      }
+      
+      steps {
+        dir('TP/formation-devops') {
+          sh 'mvn clean install'
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        dir('TP/formation-devops') {
+          sh 'docker build -t javadevops:latest .'
+        }
+      }
+    }
+
+    stage('Docker Run') {
+      steps {
+        script {
+          try {
+            sh 'docker stop javadevops'
+          }
+
+          finally {
+            sh 'docker run --rm -d --name javadevops -p 5000:8080 --network devops javadevops'
+          }
+        }
+      }
+    }
+  }
+}
